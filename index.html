@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>Speech to Bitstream</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky tab bar, six full pages switched by hash. Warm paper background, orange gradient ASCII hero, navy data bits, teal parity, red errors. */
+:root {
+  --bg: #f6f0e4; --bg2: #fbf8f1; --panel: #ffffff; --ink: #231b13; --muted: #7b6f60; --line: #e4d9c6;
+  --orange: #ff6a00; --orange2: #ffa83d; --orange3: #e04b00; --orange-ink: #c24600; --tint: #fff0df;
+  --navy: #1d3b5c; --parity: #0d8977; --bad: #d3263c;
+  --cu: #ffe2c4; --cl: #e6eff8; --cd: #e2f3ee; --cp: #f1e9db; --cc: #ebe4d6;
+  --display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --body: Inter, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15100b; --bg2: #1c150f; --panel: #221a13; --ink: #f6ece0; --muted: #a79886; --line: #3a2e22;
+    --orange: #ff7a1a; --orange2: #ffb552; --orange3: #ff5a00; --orange-ink: #ff9d52; --tint: #35241a;
+    --navy: #86b7ee; --parity: #3fd1bb; --bad: #ff6b7d;
+    --cu: #4a2c14; --cl: #1c2d3f; --cd: #143a33; --cp: #2e251b; --cc: #271f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15100b; --bg2: #1c150f; --panel: #221a13; --ink: #f6ece0; --muted: #a79886; --line: #3a2e22;
+  --orange: #ff7a1a; --orange2: #ffb552; --orange3: #ff5a00; --orange-ink: #ff9d52; --tint: #35241a;
+  --navy: #86b7ee; --parity: #3fd1bb; --bad: #ff6b7d;
+  --cu: #4a2c14; --cl: #1c2d3f; --cd: #143a33; --cp: #2e251b; --cc: #271f17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg2); }
+.in { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+p { margin: 0; }
+button, select, input, textarea { font: inherit; color: inherit; }
+a { color: var(--orange-ink); }
+:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg2); border-bottom: 1px solid var(--line); }
+.top-in { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.brand { font-family: var(--display); font-weight: 800; font-size: 17px; text-decoration: none; color: var(--ink); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.brand b { background: linear-gradient(180deg, var(--orange2), var(--orange3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+nav { display: flex; gap: 2px; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+nav::-webkit-scrollbar { display: none; }
+nav a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; padding: 7px 12px; border-radius: 6px; white-space: nowrap; }
+nav a:hover { color: var(--ink); background: var(--tint); }
+nav a[aria-current="page"] { color: var(--orange-ink); background: var(--tint); }
+.tbtn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.tbtn:hover { border-color: var(--orange); }
+
+/* pages */
+.page { padding-block: 36px 56px; position: relative; }
+.kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--orange-ink); margin-bottom: 10px; }
+.page h2 { font-size: clamp(30px, 5.2vw, 48px); line-height: 1.05; font-weight: 800; }
+.lead { color: var(--muted); max-width: 66ch; margin-top: 12px; font-size: 17px; }
+.section { margin-top: 44px; }
+.section h3 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+.section > .lead { margin-top: 4px; margin-bottom: 18px; font-size: 15px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
+.panel h4 { margin: 0 0 10px; font-family: var(--mono); font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); text-decoration: none; color: var(--ink); font-weight: 600; cursor: pointer; font-size: 15px; }
+.btn:hover { border-color: var(--orange); }
+.btn.pri { background: linear-gradient(180deg, var(--orange2), var(--orange)); color: #2a1200; border-color: var(--orange); }
+.btn.pri:hover { filter: brightness(1.06); }
+.btn.sm { padding: 7px 12px; font-size: 13px; }
+.pager { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); }
+.mono { font-family: var(--mono); }
+select, input[type="text"], textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+select { min-width: 140px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+
+/* home */
+#rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; opacity: 0.55; -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 92%); mask-image: linear-gradient(to bottom, #000 30%, transparent 92%); }
+.hero { position: relative; z-index: 1; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: center; margin-top: 18px; }
+.letters { display: flex; gap: clamp(4px, 1.2vw, 16px); min-width: 0; }
+.letters.dim .L:not(.on) { opacity: 0.62; }
+.L { background: none; border: 0; padding: 0 0 14px; cursor: pointer; position: relative; display: flex; flex-direction: column; align-items: center; transition: opacity .2s; }
+.L .g { font-family: var(--display); font-weight: 800; font-size: clamp(56px, 10.5vw, 136px); line-height: 0.95; letter-spacing: -0.04em; color: var(--orange); background: linear-gradient(180deg, var(--orange2) 0%, var(--orange) 55%, var(--orange3) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; transition: transform .25s cubic-bezier(.2,.8,.3,1); }
+.L:hover .g, .L.on .g { transform: translateY(-8px) scale(1.04); }
+.L::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: 0; height: 5px; border-radius: 3px; background: linear-gradient(90deg, var(--orange2), var(--orange3)); transform: scaleX(0); transition: transform .25s; }
+.L.on::after { transform: scaleX(1); }
+.L .code { font-family: var(--mono); font-size: 11px; line-height: 1.35; color: var(--muted); margin-top: 4px; text-align: center; }
+.L .code b { display: block; font-weight: 600; color: var(--orange-ink); }
+@media (max-width: 560px) { .L .code { font-size: 8px; } .L .code i { display: none; } }
+.meaning { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; min-height: 270px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 18px 40px -26px rgba(194, 70, 0, .45); }
+.m-kick { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.m-word { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 6.5vw, 70px); line-height: 1; letter-spacing: -0.03em; }
+.m-word .init { background: linear-gradient(180deg, var(--orange2), var(--orange3)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.m-word.swap { animation: swap .35s ease-out; }
+@keyframes swap { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.m-text { color: var(--muted); font-size: 15px; max-width: 46ch; }
+.m-phrase { margin-top: auto; font-family: var(--display); font-weight: 500; font-size: 17px; line-height: 1.4; color: var(--muted); }
+.m-phrase span { transition: color .2s; }
+.m-phrase .dim { opacity: 0.6; font-weight: 500; }
+.m-phrase .on { color: var(--orange-ink); font-weight: 800; }
+.hero h1 { margin-top: 30px; font-size: clamp(24px, 4vw, 38px); font-weight: 800; line-height: 1.1; max-width: 22ch; }
+.hero .lead { margin-top: 10px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.byline { margin-top: 18px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 40px; }
+.fact { border-top: 2px solid var(--orange); padding-top: 8px; }
+.fact strong { display: block; font-family: var(--display); font-size: 30px; font-weight: 800; line-height: 1.1; }
+.fact span { font-size: 13px; color: var(--muted); }
+
+/* theory */
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.timeline li { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.timeline .yr { font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--orange-ink); }
+.timeline p { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.anat { display: flex; height: 54px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); gap: 1px; background: var(--line); }
+.anat div { display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: var(--mono); overflow: hidden; white-space: nowrap; min-width: 0; padding: 0 2px; }
+.anat-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.anat-key i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line); }
+.trick { font-size: 15px; }
+.trick .big { font-family: var(--mono); font-size: 18px; font-weight: 600; margin: 6px 0; overflow-wrap: anywhere; }
+.model { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.node { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; font-family: var(--display); font-weight: 800; font-size: 17px; text-align: center; }
+.node.med { background: var(--tint); border-color: var(--orange); }
+.arrow { color: var(--orange-ink); font-size: 22px; font-family: var(--mono); }
+.proto { margin-top: 12px; text-align: center; font-size: 13px; color: var(--muted); font-family: var(--mono); border: 1px dashed var(--line); border-radius: 6px; padding: 6px 10px; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--bg2); position: sticky; top: 0; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; counter-reset: st; }
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; transition: background .3s, border-color .3s; }
+.stage .n { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.stage b { display: block; font-family: var(--display); font-size: 17px; font-weight: 800; }
+.stage p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.stage.hot { background: var(--tint); border-color: var(--orange); }
+
+/* table page */
+.tlayout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+.tgrid { display: grid; grid-template-columns: 30px repeat(8, minmax(0, 1fr)); gap: 3px; }
+.th { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.c { height: 48px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; line-height: 1.1; min-width: 0; }
+.c .gl { font-family: var(--mono); font-weight: 600; font-size: 15px; }
+.c .dc { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.c.ctl .gl { font-size: 10px; color: var(--muted); }
+.k-ctl { background: var(--cc); } .k-sp, .k-pun { background: var(--cp); } .k-dig { background: var(--cd); } .k-up { background: var(--cu); } .k-low { background: var(--cl); }
+.c:hover { border-color: var(--orange); }
+.c.sel { outline: 2px solid var(--orange); outline-offset: 1px; z-index: 1; }
+.detail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 70px); }
+.d-glyph { font-family: var(--mono); font-size: 64px; font-weight: 600; line-height: 1; color: var(--orange-ink); }
+.d-name { font-weight: 600; margin-top: 6px; }
+.d-sub { font-size: 14px; color: var(--muted); margin-top: 2px; }
+.d-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 14px; font-family: var(--mono); font-size: 14px; }
+.d-rows dt { color: var(--muted); } .d-rows dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.bitrow { display: flex; gap: 4px; margin-top: 14px; }
+.bitrow span { flex: 1; text-align: center; font-family: var(--mono); font-weight: 600; padding: 8px 0; border-radius: 4px; border: 1px solid var(--line); }
+.bitrow .one { background: var(--navy); color: var(--bg2); border-color: var(--navy); }
+.bitrow .gap { flex: 0 0 8px; border: 0; padding: 0; }
+.bitrow-l { display: flex; gap: 4px; font-size: 10px; font-family: var(--mono); color: var(--muted); margin-top: 3px; }
+.bitrow-l span { flex: 1; text-align: center; } .bitrow-l .gap { flex: 0 0 8px; }
+.d-note { margin-top: 14px; font-size: 14px; background: var(--tint); border-radius: 6px; padding: 10px 12px; }
+
+/* signals + lab shared */
+canvas { display: block; width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+.bits { display: flex; flex-wrap: wrap; gap: 6px; }
+.bit { font-family: var(--mono); font-weight: 600; width: 40px; height: 44px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-size: 17px; position: relative; }
+.bit.one { background: var(--navy); color: var(--bg2); border-color: var(--navy); }
+.bit.par { border-color: var(--parity); box-shadow: inset 0 -3px 0 var(--parity); }
+.bit.chg { outline: 2px solid var(--bad); outline-offset: 1px; }
+.bit small { position: absolute; left: 0; right: 0; bottom: -17px; font-size: 9px; color: var(--muted); font-weight: 400; }
+.badge { display: inline-block; font-family: var(--mono); font-weight: 600; font-size: 13px; padding: 5px 10px; border-radius: 6px; }
+.badge.ok { background: var(--cd); color: var(--parity); } .badge.err { background: rgba(211, 38, 60, .14); color: var(--bad); } .badge.warn { background: var(--tint); color: var(--orange-ink); }
+.cells { display: flex; flex-wrap: wrap; gap: 4px; }
+.cell { min-width: 44px; padding: 6px 4px; text-align: center; border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 12px; background: var(--bg); }
+.cell b { display: block; font-size: 17px; }
+.cell.s, .cell.e { border-color: var(--orange); background: var(--tint); } .cell.q { border-color: var(--parity); }
+.cell.d b { color: var(--navy); }
+.note { font-size: 13px; color: var(--muted); }
+
+/* lab */
+.mic { display: inline-flex; align-items: center; gap: 10px; background: var(--ink); color: var(--bg2); border: 1px solid var(--ink); border-radius: 8px; font-weight: 600; padding: 11px 18px; cursor: pointer; }
+.mic .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bg2); opacity: .55; }
+.mic[data-state="listening"] .dot { background: #e5484d; opacity: 1; animation: pulse 1.1s ease-in-out infinite; }
+.mic[data-state="starting"], .mic[data-state="finishing"] { opacity: .7; }
+@keyframes pulse { 50% { transform: scale(1.5); opacity: .5; } }
+textarea { width: 100%; min-height: 90px; resize: vertical; font-family: var(--mono); font-size: 15px; line-height: 1.5; }
+.live-line { min-height: 22px; margin-top: 6px; font-family: var(--mono); font-size: 14px; color: var(--orange-ink); font-style: italic; overflow-wrap: anywhere; }
+.scroll { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.scroll table { font-family: var(--mono); font-size: 13px; }
+.scroll td { padding: 4px 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.scroll td.ch { font-weight: 600; color: var(--orange-ink); }
+tr.live td { opacity: .55; font-style: italic; }
+td.lossy { text-decoration: underline wavy var(--bad); }
+.stream { padding: 12px; font-family: var(--mono); font-size: 14px; line-height: 1.95; overflow-wrap: anywhere; letter-spacing: .04em; }
+.stream i { font-style: normal; } .stream .by { border-radius: 3px; } .stream .by.cur { background: var(--tint); outline: 1px solid var(--orange); }
+.stream .by.live { opacity: .5; }
+.b1 { color: var(--navy); font-weight: 600; } .b0 { color: var(--muted); opacity: .8; } .bs, .be { color: var(--orange-ink); } .bq { color: var(--parity); font-weight: 600; } .bx { color: var(--bad); font-weight: 600; text-decoration: underline; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend b { font-family: var(--mono); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 14px; }
+.stat span { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+.stat strong { font-family: var(--mono); font-size: 19px; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.rx { min-height: 70px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-family: var(--mono); font-size: 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rx .bad { background: rgba(211, 38, 60, .18); color: var(--bad); border-radius: 3px; }
+.rx .sil { outline: 2px solid var(--orange); border-radius: 3px; }
+input[type="range"] { width: 100%; accent-color: var(--orange); }
+.sum { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 4px; font-size: 14px; }
+.sum li { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding-bottom: 3px; }
+.sum b { font-family: var(--mono); }
+#msg { min-height: 20px; font-size: 13px; color: var(--muted); margin-top: 14px; }
+
+/* viva */
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0 16px; }
+details + details { margin-top: 8px; }
+summary { cursor: pointer; padding: 13px 0; font-weight: 600; list-style: none; display: flex; gap: 10px; justify-content: space-between; align-items: baseline; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font-family: var(--mono); color: var(--orange-ink); font-size: 20px; }
+details[open] summary::after { content: "\2212"; }
+details p { padding: 0 0 14px; color: var(--muted); font-size: 15px; max-width: 80ch; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .meaning { min-height: 0; }
+  .tlayout { grid-template-columns: 1fr; }
+  .detail { position: static; order: -1; }
+}
+@media (max-width: 560px) { .brand span { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="in top-in">
+    <a class="brand" href="#home"><b>&gt;_</b><span>Speech to Bitstream</span></a>
+    <nav id="nav" aria-label="Pages">
+      <a href="#home" data-r="home">Home</a>
+      <a href="#theory" data-r="theory">Theory</a>
+      <a href="#table" data-r="table">ASCII table</a>
+      <a href="#signals" data-r="signals">Signals</a>
+      <a href="#lab" data-r="lab">Live lab</a>
+      <a href="#viva" data-r="viva">Viva</a>
+    </nav>
+    <button class="tbtn" id="theme" type="button">Theme</button>
+  </div>
+</header>
+
+<main class="in">
+
+<!-- HOME -->
+<section class="page" data-page="home">
+  <canvas id="rain" aria-hidden="true"></canvas>
+  <div class="hero">
+    <p class="eyebrow">Data Communication &middot; Practical Project</p>
+    <div class="hero-grid">
+      <div class="letters" id="letters" role="group" aria-label="The letters of ASCII"></div>
+      <div class="meaning" aria-live="polite">
+        <p class="m-kick" id="mKick"></p>
+        <p class="m-word" id="mWord"></p>
+        <p class="m-text" id="mText"></p>
+        <p class="m-phrase" id="mPhrase"></p>
+      </div>
+    </div>
+    <h1>Live Speech-to-ASCII &amp; Digital Bitstream Generator</h1>
+    <p class="lead">Say a sentence. Watch it become characters, ASCII codes, framed bits and a line signal. Then send it through a noisy channel and see what the receiver gets back.</p>
+    <div class="cta">
+      <a class="btn pri" href="#theory">Begin the tour &rarr;</a>
+      <a class="btn" href="#lab">Jump to the live lab</a>
+    </div>
+    <p class="byline" id="byline"></p>
+    <div class="facts">
+      <div class="fact"><strong>128</strong><span>characters in the set</span></div>
+      <div class="fact"><strong>7 bits</strong><span>per character, 2<sup>7</sup> = 128</span></div>
+      <div class="fact"><strong>1963</strong><span>first published</span></div>
+      <div class="fact"><strong>1968</strong><span>US federal standard</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- THEORY -->
+<section class="page" data-page="theory" hidden>
+  <p class="kicker">Theory</p>
+  <h2>What is ASCII, and why does data communication need it?</h2>
+  <p class="lead">Computers and wires only carry bits. Two machines can swap text only if they agree which bit pattern means which character. ASCII is that agreement.</p>
+
+  <div class="section">
+    <div class="grid2">
+      <div class="panel">
+        <h4>Definition</h4>
+        <p>ASCII is the American Standard Code for Information Interchange. It assigns a number from 0 to 127 to 128 characters: letters, digits, punctuation and control signals. Each number is written as a 7-bit binary value. In a byte the 8th bit is left as 0, used for parity, or used by extended character sets.</p>
+      </div>
+      <div class="panel trick">
+        <h4>One character, three forms</h4>
+        <div class="big">'A' &rarr; 65 &rarr; 1000001</div>
+        <p>Character, decimal code, 7-bit binary. The transmitter sends only the bits. The receiver looks the code up in the same table.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>A short history</h3>
+    <p class="lead">Dates from the standards record.</p>
+    <ol class="timeline" id="tl"></ol>
+  </div>
+
+  <div class="section">
+    <h3>Anatomy of the 128 codes</h3>
+    <p class="lead">The set is laid out in blocks, and the layout has useful patterns.</p>
+    <div class="anat" id="anat" role="img" aria-label="Proportional strip of the 128 ASCII codes by group"></div>
+    <div class="anat-key" id="anatKey"></div>
+    <div class="grid3" style="margin-top:18px">
+      <div class="panel trick"><h4>Case is one bit</h4><div class="big">A 1000001<br>a 1100001</div><p>Upper and lower case differ only in bit 5 (value 32). Add 32 to get lowercase.</p></div>
+      <div class="panel trick"><h4>Digits sit at 0x30</h4><div class="big">'7' = 0x30 + 7 = 55</div><p>Subtract 48 from a digit's code to get its numeric value.</p></div>
+      <div class="panel trick"><h4>Control codes carry protocol</h4><div class="big">LF 10 &middot; CR 13 &middot; ACK 6</div><p>Codes 0 to 31 were made for teleprinters and links: line feed, acknowledge, end of transmission.</p></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>The data communication model</h3>
+    <p class="lead">Every link has five parts. Here is how this project fills each one.</p>
+    <div class="panel">
+      <div class="model"><div class="node">Sender</div><span class="arrow">&rarr;</span><div class="node">Encoder</div><span class="arrow">&rarr;</span><div class="node med">Transmission medium</div><span class="arrow">&rarr;</span><div class="node">Decoder</div><span class="arrow">&rarr;</span><div class="node">Receiver</div></div>
+      <p class="proto">Protocol: the rules both sides agree on (here ASCII + parity + framing + line code)</p>
+    </div>
+    <div class="tblwrap" style="margin-top:14px"><table>
+      <thead><tr><th>Component</th><th>Meaning</th><th>In this project</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Message</td><td>The information to send</td><td>The sentence you speak or type</td></tr>
+        <tr><td class="k">Sender</td><td>Device that sends it</td><td>Microphone and the encoder in the Live lab</td></tr>
+        <tr><td class="k">Medium</td><td>Path the signal travels</td><td>A simulated channel with adjustable noise</td></tr>
+        <tr><td class="k">Receiver</td><td>Device that accepts it</td><td>The decoder panel that rebuilds the text</td></tr>
+        <tr><td class="k">Protocol</td><td>Agreed rules</td><td>ASCII, parity, UART framing, line coding</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h3>How speech becomes a bitstream</h3>
+    <p class="lead">Speech is not ASCII. It must first be turned into text, and only then encoded.</p>
+    <div class="pipe" id="pipe"></div>
+  </div>
+
+  <div class="pager"><a class="btn" href="#home">&larr; Home</a><a class="btn pri" href="#table">ASCII table &rarr;</a></div>
+</section>
+
+<!-- TABLE -->
+<section class="page" data-page="table" hidden>
+  <p class="kicker">Reference</p>
+  <h2>The full ASCII table</h2>
+  <p class="lead">Click or tab to any cell. Columns are the high bits, rows the low four bits, so the code is column &times; 16 + row.</p>
+  <div class="tlayout" style="margin-top:22px">
+    <div>
+      <div class="tgrid" id="tgrid"></div>
+      <div class="anat-key" id="tkey" style="margin-top:12px"></div>
+    </div>
+    <aside class="panel detail" id="tdetail" aria-live="polite"></aside>
+  </div>
+  <div class="pager"><a class="btn" href="#theory">&larr; Theory</a><a class="btn pri" href="#signals">Signals &rarr;</a></div>
+</section>
+
+<!-- SIGNALS -->
+<section class="page" data-page="signals" hidden>
+  <p class="kicker">Encoding</p>
+  <h2>From bits to a signal on the wire</h2>
+  <p class="lead">Bits are numbers. A wire carries voltage. Line coding is the rule that turns one into the other, and parity and framing make the stream safe to receive.</p>
+
+  <div class="section">
+    <h3>Line coding, five ways</h3>
+    <p class="lead">Type a word. The same bits are drawn with each scheme. Levels: top is positive, middle is zero, bottom is negative.</p>
+    <div class="panel">
+      <div class="row"><div class="field"><label for="sigWord">Word (8-bit ASCII, MSB first)</label><input type="text" id="sigWord" value="Hi" maxlength="6" spellcheck="false"></div><p class="note" id="sigBitsNote" style="flex:1"></p></div>
+      <div style="margin-top:14px"><canvas id="sigCv" role="img" aria-label="The same bits drawn as five different line codes"></canvas></div>
+    </div>
+    <div class="tblwrap" style="margin-top:14px"><table>
+      <thead><tr><th>Scheme</th><th>Rule</th><th>Strength</th><th>Weakness</th></tr></thead>
+      <tbody id="schemeTbl"></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h3>Parity, the simplest error check</h3>
+    <p class="lead">A parity bit makes the count of 1s even (or odd). Click any bit to flip it, as noise would, and see what the receiver notices.</p>
+    <div class="panel">
+      <div class="row">
+        <div class="field"><label for="parChar">Character</label><input type="text" id="parChar" value="A" maxlength="1" style="width:80px" spellcheck="false"></div>
+        <div class="field"><label for="parKind">Parity</label><select id="parKind"><option value="even">Even</option><option value="odd">Odd</option></select></div>
+        <button class="btn sm" id="parReset" type="button">Reset bits</button>
+      </div>
+      <div class="bits" id="parBits" style="margin-top:20px; padding-bottom:18px"></div>
+      <p id="parOut" style="margin-top:6px"></p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Framing a character for a serial line (UART)</h3>
+    <p class="lead">The line idles high. A start bit (0) wakes the receiver, data bits follow least significant bit first, and a stop bit (1) returns the line to idle.</p>
+    <div class="panel">
+      <div class="row">
+        <div class="field"><label for="uartChar">Character</label><input type="text" id="uartChar" value="A" maxlength="1" style="width:80px" spellcheck="false"></div>
+        <div class="field"><label for="uartPar">Parity</label><select id="uartPar"><option value="none">None (8N1)</option><option value="even">Even (8E1)</option><option value="odd">Odd (8O1)</option></select></div>
+      </div>
+      <div class="cells" id="uartCells" style="margin-top:14px"></div>
+      <div style="margin-top:14px"><canvas id="uartCv" role="img" aria-label="Waveform of one UART frame"></canvas></div>
+      <p class="note" id="uartInfo" style="margin-top:10px"></p>
+    </div>
+  </div>
+
+  <div class="pager"><a class="btn" href="#table">&larr; ASCII table</a><a class="btn pri" href="#lab">Open the live lab &rarr;</a></div>
+</section>
+
+<!-- LAB -->
+<section class="page" data-page="lab" hidden>
+  <p class="kicker">Live lab</p>
+  <h2>Speak. Encode. Transmit. Receive.</h2>
+  <p class="lead">Everything updates as you talk. Raise the noise to see parity catch corrupted characters, and the ones it misses.</p>
+
+  <div class="panel" style="margin-top:22px">
+    <h4>Transmitter</h4>
+    <div class="row">
+      <button id="mic" class="mic" data-state="idle" type="button" hidden><span class="dot"></span><span id="micLabel">Start listening</span></button>
+      <div class="field"><label for="enc">Encoding</label><select id="enc"><option value="ascii7">ASCII, 7 bit</option><option value="ascii8" selected>ASCII, 8 bit</option><option value="utf8">UTF-8</option></select></div>
+      <div class="field"><label for="par">Parity</label><select id="par"><option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option></select></div>
+      <div class="field"><label for="frm">Framing</label><select id="frm"><option value="raw">Raw bits</option><option value="uart">UART (start + stop)</option></select></div>
+      <div class="field"><label for="ord">Bit order</label><select id="ord"><option value="msb">MSB first</option><option value="lsb">LSB first</option></select></div>
+      <div class="field"><label for="lc">Line code</label><select id="lc"><option value="nrzl">NRZ-L</option><option value="nrzi">NRZ-I</option><option value="rz">RZ</option><option value="man">Manchester</option><option value="ami">AMI</option></select></div>
+      <div class="field"><label for="baud">Baud</label><select id="baud" style="min-width:90px"><option>300</option><option>1200</option><option selected>9600</option><option>115200</option></select></div>
+      <button class="btn sm" id="clear" type="button">Clear</button>
+    </div>
+    <div class="field" style="margin-top:14px"><label for="txt">Transcript (editable, or just type)</label><textarea id="txt" spellcheck="false">Hello, world</textarea></div>
+    <p class="live-line" id="live" aria-live="polite"></p>
+    <p class="note" id="micNote" hidden>Live dictation needs a Chromium browser or the Claude desktop app, and the artifact opened inside your organization. Typing works everywhere.</p>
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel"><h4>ASCII codes</h4><div class="scroll" id="tableBox"></div><div class="actions"><button class="btn sm" id="dlCsv" type="button" hidden>Save table (.csv)</button></div></div>
+    <div class="panel"><h4>Bitstream</h4><div class="scroll"><div class="stream" id="stream"></div></div>
+      <div class="legend"><span><b class="b1">1</b>/<b class="b0">0</b> data</span><span><b class="bs">0</b>/<b class="be">1</b> start / stop</span><span><b class="bq">0</b> parity</span><span><b class="bx">1</b> flipped by noise</span></div>
+      <div class="actions"><button class="btn sm" id="copy" type="button">Copy bits</button><button class="btn sm" id="dlTxt" type="button" hidden>Save bits (.txt)</button></div></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h4>Line signal, last 40 bits</h4>
+    <canvas id="sig" role="img" aria-label="Transmitted and received waveform"></canvas>
+    <div class="stats">
+      <div class="stat"><span>Characters</span><strong id="sChars">0</strong></div>
+      <div class="stat"><span>Bytes</span><strong id="sBytes">0</strong></div>
+      <div class="stat"><span>Frame format</span><strong id="sFmt">-</strong></div>
+      <div class="stat"><span>Bits on wire</span><strong id="sBits">0</strong></div>
+      <div class="stat"><span>Overhead</span><strong id="sOver">0%</strong></div>
+      <div class="stat"><span>Data rate</span><strong id="sRate">0 bit/s</strong></div>
+      <div class="stat"><span>Time to send</span><strong id="sTime">0 ms</strong></div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <h4>Channel</h4>
+      <div class="field"><label for="ber">Noise: bit error rate <b id="berVal" class="mono">0%</b></label><input type="range" id="ber" min="0" max="20" step="0.5" value="0"></div>
+      <p class="note" style="margin-top:8px">Each transmitted bit is flipped with this probability. The same noise pattern is reused as you speak, so results are repeatable.</p>
+      <div class="actions"><button class="btn pri sm" id="send" type="button">Send over channel</button><button class="btn sm" id="reseed" type="button">New noise pattern</button></div>
+    </div>
+    <div class="panel">
+      <h4>Receiver</h4>
+      <div class="rx" id="rx"></div>
+      <ul class="sum" id="rxStats"></ul>
+      <div class="legend"><span><b style="color:var(--bad)">red</b> caught by parity or framing</span><span><b style="color:var(--orange-ink)">orange outline</b> wrong but not caught</span></div>
+      <div class="actions"><button class="btn sm" id="dlJson" type="button" hidden>Save session (.json)</button></div>
+    </div>
+  </div>
+  <div id="msg" role="status" aria-live="polite"></div>
+  <div class="pager"><a class="btn" href="#signals">&larr; Signals</a><a class="btn pri" href="#viva">Viva questions &rarr;</a></div>
+</section>
+
+<!-- VIVA -->
+<section class="page" data-page="viva" hidden>
+  <p class="kicker">Viva ready</p>
+  <h2>Questions an examiner may ask</h2>
+  <p class="lead">Short answers you can say out loud. Open each one.</p>
+  <div style="margin-top:22px" id="qa"></div>
+
+  <div class="section">
+    <h3>Applications and future scope</h3>
+    <div class="grid2" style="margin-top:12px">
+      <div class="panel"><h4>Where ASCII is used</h4><p>Plain text files, source code, serial consoles, and the text commands of protocols such as HTTP and SMTP.</p></div>
+      <div class="panel"><h4>Where this project can go</h4><p>CRC or Hamming codes for correction, UTF-8 by default, real hardware over a serial port, and audio tones (FSK) to send the bits through a speaker.</p></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Project details</h3>
+    <p class="lead">Filled in once, shown on the home page. Saved in this browser only.</p>
+    <div class="panel"><div class="info-grid">
+      <div class="field"><label for="iName">Name</label><input type="text" id="iName" placeholder="Your name"></div>
+      <div class="field"><label for="iRoll">Roll or enrolment number</label><input type="text" id="iRoll" placeholder="e.g. 24CS042"></div>
+      <div class="field"><label for="iClass">Class</label><input type="text" id="iClass" placeholder="e.g. SY BSc CS"></div>
+      <div class="field"><label for="iGuide">Guide / subject teacher</label><input type="text" id="iGuide" placeholder="Name"></div>
+    </div></div>
+  </div>
+  <div class="pager"><a class="btn" href="#lab">&larr; Live lab</a><a class="btn pri" href="#home">Back to start</a></div>
+</section>
+
+</main>
+
+<script>
+/* Standalone shim: supplies mic dictation and file saving when the page is not opened inside Claude. */
+(function () {
+  if (window.claude && window.claude.use) return;
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var dictation = null;
+  if (SR) {
+    var rec = null, state = "idle", hp = [], hf = [], hs = [], wantStop = false;
+    var emit = function (list, v) { list.forEach(function (f) { try { f(v); } catch (e) {} }); };
+    var setState = function (st, reason) { state = st; emit(hs, { state: st, reason: reason }); };
+    dictation = {
+      start: function () {
+        return new Promise(function (resolve, reject) {
+          if (state !== "idle") { resolve(); return; }
+          rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = navigator.language || "en-US";
+          wantStop = false; var failed = null;
+          setState("starting");
+          rec.onstart = function () { setState("listening"); resolve(); };
+          rec.onresult = function (ev) {
+            var interim = "";
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+              var r = ev.results[i], t = r[0].transcript;
+              if (r.isFinal) { emit(hp, { text: "" }); emit(hf, { text: (t.charAt(0) === " " ? "" : " ") + t }); }
+              else interim += t;
+            }
+            if (interim) emit(hp, { text: interim });
+          };
+          rec.onerror = function (ev) {
+            failed = (ev.error === "not-allowed" || ev.error === "service-not-allowed") ? "not_granted" : ev.error === "no-speech" || ev.error === "aborted" ? null : "upstream_error";
+            if (failed) reject({ code: failed, message: ev.error });
+          };
+          rec.onend = function () { emit(hp, { text: "" }); setState("idle", failed || (wantStop ? "stopped" : "stopped")); };
+          try { rec.start(); } catch (e) { setState("idle", "upstream_error"); reject({ code: "upstream_error", message: String(e) }); }
+        });
+      },
+      stop: function () { wantStop = true; try { rec && rec.stop(); } catch (e) {} return Promise.resolve(); },
+      active: function () { return state !== "idle"; },
+      onPartial: function (f) { hp.push(f); return function () { hp = hp.filter(function (x) { return x !== f; }); }; },
+      onFinal: function (f) { hf.push(f); return function () { hf = hf.filter(function (x) { return x !== f; }); }; },
+      onState: function (f) { hs.push(f); return function () { hs = hs.filter(function (x) { return x !== f; }); }; }
+    };
+  }
+  var downloads = {
+    save: function (o) {
+      return new Promise(function (resolve, reject) {
+        try {
+          var blob = o.data instanceof Blob ? o.data : new Blob([o.data], { type: "text/plain;charset=utf-8" });
+          var url = URL.createObjectURL(blob), a = document.createElement("a");
+          a.href = url; a.download = o.filename; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+          resolve({ status: "saved" });
+        } catch (e) { reject({ code: "unavailable", message: String(e) }); }
+      });
+    }
+  };
+  window.claude = { use: function (name) { return Promise.resolve(name === "dictation" ? dictation : name === "downloads" ? downloads : null); } };
+})();
+</script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function cv(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- ASCII data ---------- */
+  var CTRL = [["NUL","Null"],["SOH","Start of heading"],["STX","Start of text"],["ETX","End of text"],["EOT","End of transmission"],["ENQ","Enquiry"],["ACK","Acknowledge"],["BEL","Bell"],["BS","Backspace"],["HT","Horizontal tab"],["LF","Line feed"],["VT","Vertical tab"],["FF","Form feed"],["CR","Carriage return"],["SO","Shift out"],["SI","Shift in"],["DLE","Data link escape"],["DC1","Device control 1 (XON)"],["DC2","Device control 2"],["DC3","Device control 3 (XOFF)"],["DC4","Device control 4"],["NAK","Negative acknowledge"],["SYN","Synchronous idle"],["ETB","End of transmission block"],["CAN","Cancel"],["EM","End of medium"],["SUB","Substitute"],["ESC","Escape"],["FS","File separator"],["GS","Group separator"],["RS","Record separator"],["US","Unit separator"]];
+  function kindOf(c) { if (c < 32 || c === 127) return "ctl"; if (c === 32) return "sp"; if (c >= 48 && c <= 57) return "dig"; if (c >= 65 && c <= 90) return "up"; if (c >= 97 && c <= 122) return "low"; return "pun"; }
+  var KIND_NAME = { ctl: "Control code", sp: "Space", dig: "Digit", up: "Uppercase letter", low: "Lowercase letter", pun: "Punctuation or symbol" };
+  function lab(c, chr) { if (c === 32) return "SP"; if (c < 32) return CTRL[c][0]; if (c === 127) return "DEL"; return chr || String.fromCharCode(c); }
+  function bin(v, w) { return v.toString(2).padStart(w, "0"); }
+
+  /* ---------- router ---------- */
+  var ROUTES = ["home", "theory", "table", "signals", "lab", "viva"];
+  var current = "home";
+  function route() {
+    var h = (location.hash || "#home").slice(1);
+    if (ROUTES.indexOf(h) < 0) h = "home";
+    current = h;
+    $$(".page").forEach(function (p) { p.hidden = p.getAttribute("data-page") !== h; });
+    $$("#nav a").forEach(function (a) { if (a.getAttribute("data-r") === h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    window.scrollTo(0, 0);
+    var act = $$("#nav a").filter(function (a) { return a.getAttribute("data-r") === h; })[0];
+    if (act && act.scrollIntoView) { try { act.scrollIntoView({ inline: "center", block: "nearest" }); } catch (e) {} }
+    if (h === "home") startRain(); else stopRain();
+    if (h === "signals") renderSignals();
+    if (h === "lab") renderLab();
+  }
+  window.addEventListener("hashchange", route);
+  document.addEventListener("keydown", function (e) {
+    var t = e.target, tag = t && t.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (t && t.isContentEditable) || e.ctrlKey || e.metaKey || e.altKey) return;
+    var i = ROUTES.indexOf(current);
+    if (e.key === "ArrowRight" && i < ROUTES.length - 1) location.hash = ROUTES[i + 1];
+    if (e.key === "ArrowLeft" && i > 0) location.hash = ROUTES[i - 1];
+  });
+
+  /* ---------- theme ---------- */
+  function isDark() { var t = document.documentElement.getAttribute("data-theme"); if (t) return t === "dark"; return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+  var saved = store("s2b-theme"); if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+  $("theme").addEventListener("click", function () { var d = !isDark(); document.documentElement.setAttribute("data-theme", d ? "dark" : "light"); store("s2b-theme", d ? "dark" : "light"); });
+  function redrawAll() { if (current === "signals") renderSignals(); if (current === "lab") drawLab(); if (current === "home") drawRainFrame(true); }
+  try {
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    (mq.addEventListener ? mq.addEventListener.bind(mq, "change") : mq.addListener.bind(mq))(redrawAll);
+    new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  } catch (e) {}
+  window.addEventListener("resize", function () { redrawAll(); });
+
+  /* ---------- HOME: letters ---------- */
+  var LET = ["A", "S", "C", "I", "I"];
+  var MEAN = [
+    { w: "American", t: "Created by the American Standards Association, now ANSI. The standard began as a national one." },
+    { w: "Standard", t: "A published agreement. Every device that follows it reads the same number as the same character." },
+    { w: "Code", t: "A lookup table. Each letter, digit, symbol and control signal gets a number from 0 to 127." },
+    { w: "Information", t: "What gets sent: text, numbers and punctuation, plus control codes such as line feed and acknowledge." },
+    { w: "Interchange", t: "Exchange between unlike machines. Teleprinters, terminals and computers swap text without translation." }
+  ];
+  var hold = false, cur = 0, cycleT = null;
+  (function buildHome() {
+    $("letters").innerHTML = LET.map(function (l, i) {
+      var c = l.charCodeAt(0);
+      return '<button class="L" type="button" data-i="' + i + '" aria-label="' + l + ' stands for ' + MEAN[i].w + '"><span class="g">' + l + '</span><span class="code"><b>' + c + "</b><i>" + bin(c, 8) + "</i></span></button>";
+    }).join("");
+    $("mPhrase").innerHTML = '<span data-w="0">American</span> <span data-w="1">Standard</span> <span data-w="2">Code</span> <span class="dim">for</span> <span data-w="3">Information</span> <span data-w="4">Interchange</span>';
+    $$(".L").forEach(function (b) {
+      var i = +b.getAttribute("data-i");
+      b.addEventListener("pointerenter", function () { hold = true; setMeaning(i); });
+      b.addEventListener("pointerleave", function () { hold = false; });
+      b.addEventListener("focus", function () { hold = true; setMeaning(i); });
+      b.addEventListener("blur", function () { hold = false; });
+      b.addEventListener("click", function () { setMeaning(i); });
+    });
+    setMeaning(0);
+    if (!reduced) cycleT = setInterval(function () { if (!hold && current === "home" && !document.hidden) setMeaning((cur + 1) % 5); }, 2800);
+    var info = ["iName", "iRoll", "iClass", "iGuide"];
+    info.forEach(function (id) { var v = store("s2b-" + id); if (v) $(id).value = v; $(id).addEventListener("input", function () { store("s2b-" + id, $(id).value); byline(); }); });
+    byline();
+  })();
+  function byline() {
+    var parts = ["iName", "iRoll", "iClass", "iGuide"].map(function (id) { return $(id).value.trim(); }).filter(Boolean);
+    $("byline").textContent = parts.join("  /  ");
+    $("byline").hidden = !parts.length;
+  }
+  function setMeaning(i) {
+    cur = i; var m = MEAN[i];
+    $("mKick").textContent = LET[i] + " stands for";
+    $("mWord").innerHTML = '<span class="init">' + m.w[0] + "</span>" + esc(m.w.slice(1));
+    $("mText").textContent = m.t;
+    $$("#mPhrase [data-w]").forEach(function (s) { s.classList.toggle("on", +s.getAttribute("data-w") === i); });
+    $$(".L").forEach(function (b) { b.classList.toggle("on", +b.getAttribute("data-i") === i); });
+    $("letters").classList.add("dim");
+    var w = $("mWord"); w.classList.remove("swap"); void w.offsetWidth; w.classList.add("swap");
+  }
+
+  /* ---------- HOME: binary rain ---------- */
+  var rainOn = false, rainRaf = 0, rainCols = [], lastT = 0;
+  function drawRainFrame(staticDraw) {
+    var c = $("rain"); if (!c || current !== "home") return;
+    var dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; if (!w || !h) return;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); rainCols = []; }
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var step = 20, n = Math.floor(w / step);
+    while (rainCols.length < n) rainCols.push(Math.random() * h);
+    g.font = "14px " + cv("--mono"); g.textAlign = "center"; g.fillStyle = cv("--orange");
+    for (var i = 0; i < n; i++) {
+      for (var k = 0; k < 9; k++) {
+        var y = rainCols[i] - k * step;
+        var row = Math.floor(y / step);
+        g.globalAlpha = (1 - k / 9) * 0.28;
+        g.fillText(((i * 7 + row * 13 + (i ^ row)) & 1) ? "1" : "0", i * step + step / 2, y);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  function rainLoop(t) {
+    if (!rainOn) return;
+    if (t - lastT > 45) {
+      var c = $("rain"), h = c.clientHeight;
+      for (var i = 0; i < rainCols.length; i++) { rainCols[i] += 1.4 + (i % 5) * 0.35; if (rainCols[i] > h + 200) rainCols[i] = -Math.random() * 120; }
+      drawRainFrame(); lastT = t;
+    }
+    rainRaf = requestAnimationFrame(rainLoop);
+  }
+  function startRain() { drawRainFrame(true); if (reduced || rainOn) return; rainOn = true; rainRaf = requestAnimationFrame(rainLoop); }
+  function stopRain() { rainOn = false; cancelAnimationFrame(rainRaf); }
+
+  /* ---------- THEORY ---------- */
+  (function buildTheory() {
+    var tl = [
+      ["1960 to 1963", "A committee of the American Standards Association develops a 7-bit code for text."],
+      ["1963", "ASA X3.4-1963 is published. It has capitals and control codes, but no lowercase letters."],
+      ["1967", "A revision adds lowercase letters and settles the layout still used today."],
+      ["1968", "A US presidential order makes ASCII the standard for federal computers."],
+      ["1969", "RFC 20 describes ASCII for network interchange. ASA is renamed ANSI."],
+      ["Early 1990s", "Unicode and UTF-8 arrive. The first 128 Unicode characters are exactly ASCII."]
+    ];
+    $("tl").innerHTML = tl.map(function (x) { return '<li><span class="yr">' + x[0] + "</span><p>" + x[1] + "</p></li>"; }).join("");
+    var groups = [["Control", 32, "cc", "0 to 31"], ["Space", 1, "cp", ""], ["Symbols", 15, "cp", "33 to 47"], ["Digits", 10, "cd", "48 to 57"], ["Symbols", 7, "cp", ""], ["Uppercase", 26, "cu", "65 to 90"], ["Symbols", 6, "cp", ""], ["Lowercase", 26, "cl", "97 to 122"], ["Symbols", 4, "cp", ""], ["DEL", 1, "cc", ""]];
+    $("anat").innerHTML = groups.map(function (g) {
+      return '<div style="flex:' + g[1] + ' 1 0;background:var(--' + g[2] + ')" title="' + g[0] + " (" + g[1] + ')">' + (g[1] >= 7 ? g[0] : "") + "</div>";
+    }).join("");
+    var key = [["cc", "Control codes 0 to 31 and DEL 127"], ["cd", "Digits 48 to 57"], ["cu", "Uppercase 65 to 90"], ["cl", "Lowercase 97 to 122"], ["cp", "Space and symbols"]];
+    $("anatKey").innerHTML = key.map(function (k) { return '<span><i style="background:var(--' + k[0] + ')"></i>' + k[1] + "</span>"; }).join("");
+    var st = [["Voice", "Sound waves from the speaker."], ["Microphone", "Turns sound pressure into an analog voltage."], ["Speech recognition", "Digitises the audio and turns it into text."], ["ASCII encoder", "Looks up each character's 7 or 8 bit code."], ["Parity and framing", "Adds a parity bit, plus start and stop bits for UART."], ["Line coder", "Maps bits to voltage levels: NRZ, RZ, Manchester, AMI."], ["Channel", "Wire or air. Noise can flip bits."], ["Receiver", "Recovers the bits, checks parity and framing."], ["ASCII decoder", "Looks the codes up again and shows the text."]];
+    $("pipe").innerHTML = st.map(function (s, i) { return '<div class="stage"><span class="n">Step ' + (i + 1) + "</span><b>" + s[0] + "</b><p>" + s[1] + "</p></div>"; }).join("");
+    var k = 0, stages = $$("#pipe .stage");
+    if (!reduced) setInterval(function () { if (current !== "theory") return; stages.forEach(function (s, i) { s.classList.toggle("hot", i === k % stages.length); }); k++; }, 1100);
+  })();
+
+  /* ---------- TABLE PAGE ---------- */
+  (function buildTable() {
+    var h = '<div class="th"></div>';
+    for (var c = 0; c < 8; c++) h += '<div class="th">' + c.toString(16).toUpperCase() + "_</div>";
+    for (var r = 0; r < 16; r++) {
+      h += '<div class="th">_' + r.toString(16).toUpperCase() + "</div>";
+      for (c = 0; c < 8; c++) {
+        var code = c * 16 + r, k = kindOf(code), g = lab(code);
+        h += '<button type="button" class="c k-' + k + (k === "ctl" ? " ctl" : "") + '" data-c="' + code + '" aria-label="' + esc(g) + ", code " + code + '"><span class="gl">' + esc(g) + '</span><span class="dc">' + code + "</span></button>";
+      }
+    }
+    $("tgrid").innerHTML = h;
+    $$("#tgrid .c").forEach(function (b) {
+      var code = +b.getAttribute("data-c");
+      b.addEventListener("click", function () { showCode(code); });
+      b.addEventListener("pointerenter", function () { showCode(code); });
+      b.addEventListener("focus", function () { showCode(code); });
+    });
+    $("tkey").innerHTML = [["cc", "Control"], ["cp", "Space and symbols"], ["cd", "Digits"], ["cu", "Uppercase"], ["cl", "Lowercase"]].map(function (k) { return '<span><i style="background:var(--' + k[0] + ')"></i>' + k[1] + "</span>"; }).join("");
+    showCode(65);
+  })();
+  function showCode(c) {
+    $$("#tgrid .c").forEach(function (b) { b.classList.toggle("sel", +b.getAttribute("data-c") === c); });
+    var k = kindOf(c), b7 = bin(c, 7), g = lab(c);
+    var name = c < 32 ? CTRL[c][1] : c === 127 ? "Delete" : c === 32 ? "Space" : KIND_NAME[k];
+    var sub = c < 32 || c === 127 ? "Control code" : KIND_NAME[k];
+    var chars = b7.split("").map(function (x, i) { return '<span class="' + (x === "1" ? "one" : "") + '">' + x + "</span>" + (i === 2 ? '<span class="gap"></span>' : ""); }).join("");
+    var labels = "6 5 4 3 2 1 0".split(" ").map(function (x, i) { return "<span>" + x + "</span>" + (i === 2 ? '<span class="gap"></span>' : ""); }).join("");
+    var note = "";
+    if (k === "up") note = "Lowercase pair: '" + String.fromCharCode(c + 32) + "' is " + (c + 32) + ". Only bit 5 changes.";
+    else if (k === "low") note = "Uppercase pair: '" + String.fromCharCode(c - 32) + "' is " + (c - 32) + ". Only bit 5 changes.";
+    else if (k === "dig") note = "Numeric value " + (c - 48) + " = code " + c + " minus 48 (0x30).";
+    else if (k === "ctl") note = c === 127 ? "All seven bits are 1. On paper tape, punching every hole deleted a character." : "Not printable. It controls a device or a link.";
+    else note = "Printable " + (k === "sp" ? "blank" : "symbol") + ".";
+    $("tdetail").innerHTML = '<div class="d-glyph">' + esc(g) + '</div><p class="d-name">' + esc(name) + '</p><p class="d-sub">' + sub + "</p>" +
+      '<dl class="d-rows"><dt>Decimal</dt><dd>' + c + "</dd><dt>Hex</dt><dd>0x" + c.toString(16).toUpperCase().padStart(2, "0") + "</dd><dt>Octal</dt><dd>" + c.toString(8).padStart(3, "0") + "</dd><dt>Binary</dt><dd>" + b7.slice(0, 3) + " " + b7.slice(3) + "</dd></dl>" +
+      '<div class="bitrow">' + chars + '</div><div class="bitrow-l">' + labels + '</div><p class="d-note">' + esc(note) + "</p>";
+  }
+
+  /* ---------- line coding + canvas ---------- */
+  function halves(bits, scheme) {
+    var out = [], st = -1, pol = 1;
+    bits.forEach(function (b) {
+      if (scheme === "nrzl") { var v = b ? 1 : -1; out.push(v, v); }
+      else if (scheme === "nrzi") { if (b) st = -st; out.push(st, st); }
+      else if (scheme === "rz") { out.push(b ? 1 : -1, 0); }
+      else if (scheme === "man") { out.push(b ? -1 : 1, b ? 1 : -1); }
+      else { if (b) { out.push(pol, pol); pol = -pol; } else out.push(0, 0); }
+    });
+    return out;
+  }
+  var SCHEMES = { nrzl: "NRZ-L", nrzi: "NRZ-I", rz: "RZ", man: "Manchester", ami: "AMI" };
+  function fit(c, hpx) {
+    var dpr = window.devicePixelRatio || 1; c.style.height = hpx + "px";
+    var w = c.clientWidth; if (!w) return null;
+    c.width = Math.round(w * dpr); c.height = Math.round(hpx * dpr);
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, hpx);
+    return { g: g, w: w, h: hpx };
+  }
+  function drawLanes(c, lanes, maxBits) {
+    var LH = 100, f = fit(c, lanes.length * LH); if (!f) return;
+    var g = f.g, w = f.w;
+    var line = cv("--line"), muted = cv("--muted"), navy = cv("--navy"), orange = cv("--orange"), par = cv("--parity"), bad = cv("--bad"), mono = cv("--mono"), body = cv("--body");
+    lanes.forEach(function (L, li) {
+      var y0 = li * LH, top = y0 + 28, bot = y0 + LH - 12, mid = (top + bot) / 2, amp = (bot - top) / 2;
+      var n = Math.min(maxBits, L.bits.length), start = L.bits.length - n;
+      g.font = "600 11px " + mono; g.fillStyle = muted; g.textAlign = "left"; g.fillText(L.label, 8, y0 + 15);
+      var lw = g.measureText(L.label).width + 20;
+      if (!n) { g.font = "13px " + body; g.fillText("The waveform appears here.", 8, mid + 4); return; }
+      var hv = halves(L.bits, L.scheme), bw = (w - 16) / maxBits, x0 = w - 8 - n * bw, i, x;
+      g.strokeStyle = line; g.lineWidth = 1;
+      for (i = 0; i <= n; i++) { x = Math.round(x0 + i * bw) + 0.5; g.beginPath(); g.moveTo(x, y0 + 21); g.lineTo(x, y0 + LH - 4); g.stroke(); }
+      g.setLineDash([3, 4]); g.beginPath(); g.moveTo(8, Math.round(mid) + 0.5); g.lineTo(w - 8, Math.round(mid) + 0.5); g.stroke(); g.setLineDash([]);
+      g.lineWidth = 2; g.lineJoin = "round";
+      var prev = null;
+      for (i = 0; i < n; i++) {
+        var bi = start + i, kind = (L.kinds && L.kinds[bi]) || "d";
+        var col = (L.err && L.err[bi]) ? bad : kind === "d" ? navy : kind === "q" ? par : kind === "i" ? muted : orange;
+        for (var hh = 0; hh < 2; hh++) {
+          var y = mid - hv[2 * bi + hh] * amp * 0.82, xa = x0 + i * bw + hh * bw / 2, xb = xa + bw / 2;
+          g.strokeStyle = col;
+          if (prev !== null && prev !== y) { g.beginPath(); g.moveTo(xa, prev); g.lineTo(xa, y); g.stroke(); }
+          g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); prev = y;
+        }
+        var tx = x0 + i * bw + bw / 2;
+        if (bw >= 13 && tx > lw + 8 && kind !== "i") { g.fillStyle = muted; g.font = "11px " + mono; g.textAlign = "center"; g.fillText(String(L.bits[bi]), tx, y0 + 15); }
+      }
+      g.textAlign = "left";
+    });
+  }
+  function bitsFromString(s, w) { var out = []; Array.from(s).forEach(function (ch) { var c = ch.codePointAt(0); if (c > 255) c = 63; bin(c, w).split("").forEach(function (b) { out.push(+b); }); }); return out; }
+
+  /* ---------- SIGNALS PAGE ---------- */
+  var schemeRows = [
+    ["NRZ-L", "1 is high, 0 is low, for the whole bit.", "Simplest. Least bandwidth.", "Long runs of equal bits have no transitions, so the clock can drift. Has a DC component."],
+    ["NRZ-I", "A 1 flips the level. A 0 keeps it.", "Level changes carry the data, so swapped wires do not matter.", "A long run of 0s has no transitions."],
+    ["RZ", "1 is high, 0 is low, each returning to zero mid-bit.", "Returning to zero every bit helps timing.", "About double the bandwidth. Needs three levels."],
+    ["Manchester", "1 is low to high mid-bit, 0 is high to low. Some standards use the opposite.", "A transition in every bit gives a built-in clock. No DC component.", "Needs double the bandwidth."],
+    ["AMI", "0 is zero volts. 1s alternate between positive and negative pulses.", "No DC component. A repeated polarity reveals an error.", "A long run of 0s loses timing."]
+  ];
+  $("schemeTbl").innerHTML = schemeRows.map(function (r) { return '<tr><td class="k">' + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>"; }).join("");
+
+  var parState = { orig: [], now: [] };
+  function parInit() {
+    var ch = $("parChar").value || "A", c = ch.codePointAt(0); if (c > 127) c = 63;
+    var d = bin(c, 7).split("").map(Number), ones = d.reduce(function (a, b) { return a + b; }, 0);
+    var p = $("parKind").value === "even" ? ones % 2 : 1 - (ones % 2);
+    parState.orig = d.concat([p]); parState.now = parState.orig.slice(); parState.c = c;
+    parRender();
+  }
+  function parRender() {
+    var labs = ["b6", "b5", "b4", "b3", "b2", "b1", "b0", "P"];
+    $("parBits").innerHTML = parState.now.map(function (b, i) {
+      return '<button type="button" class="bit' + (b ? " one" : "") + (i === 7 ? " par" : "") + (b !== parState.orig[i] ? " chg" : "") + '" data-i="' + i + '" aria-label="Bit ' + labs[i] + " is " + b + '">' + b + "<small>" + labs[i] + "</small></button>";
+    }).join("");
+    $$("#parBits .bit").forEach(function (el) { el.addEventListener("click", function () { var i = +el.getAttribute("data-i"); parState.now[i] = 1 - parState.now[i]; parRender(); }); });
+    var total = parState.now.reduce(function (a, b) { return a + b; }, 0), even = $("parKind").value === "even";
+    var pass = even ? total % 2 === 0 : total % 2 === 1;
+    var changed = parState.now.filter(function (b, i) { return b !== parState.orig[i]; }).length;
+    var out = "Number of 1s: <b class='mono'>" + total + "</b> (" + (even ? "even" : "odd") + " parity expected). ";
+    if (!pass) out += '<span class="badge err">Error detected</span> The receiver asks for a resend. Parity cannot say which bit is wrong.';
+    else if (changed) out += '<span class="badge warn">Error missed</span> ' + changed + " bits changed but the count of 1s still looks right. Parity misses an even number of flips.";
+    else out += '<span class="badge ok">Valid</span> The frame is intact.';
+    $("parOut").innerHTML = out;
+  }
+  $("parChar").addEventListener("input", parInit);
+  $("parKind").addEventListener("change", parInit);
+  $("parReset").addEventListener("click", function () { parState.now = parState.orig.slice(); parRender(); });
+
+  function frameOf(val, o) {
+    var w = o.mode === "ascii7" ? 7 : 8, d = bin(val, w), ones = (d.match(/1/g) || []).length, bits = [];
+    var ord = o.ord === "lsb" ? d.split("").reverse().join("") : d, pb = null;
+    if (o.par !== "none") pb = o.par === "even" ? ones % 2 : 1 - (ones % 2);
+    if (o.fr === "uart") bits.push({ b: 0, k: "s" });
+    ord.split("").forEach(function (c) { bits.push({ b: +c, k: "d" }); });
+    if (pb !== null) bits.push({ b: pb, k: "q" });
+    if (o.fr === "uart") bits.push({ b: 1, k: "e" });
+    return bits;
+  }
+  function renderUart() {
+    var ch = $("uartChar").value || "A", c = ch.codePointAt(0); if (c > 255) c = 63;
+    var par = $("uartPar").value, fr = frameOf(c, { mode: "ascii8", par: par, fr: "uart", ord: "lsb" });
+    var d = 0;
+    $("uartCells").innerHTML = fr.map(function (f) {
+      var name = f.k === "s" ? "Start" : f.k === "e" ? "Stop" : f.k === "q" ? "Parity" : "D" + (d++);
+      return '<div class="cell ' + f.k + '"><b>' + f.b + "</b>" + name + "</div>";
+    }).join("");
+    var bits = [1, 1].concat(fr.map(function (f) { return f.b; }), [1, 1]), kinds = ["i", "i"].concat(fr.map(function (f) { return f.k; }), ["i", "i"]);
+    drawLanes($("uartCv"), [{ label: "UART frame for '" + lab(c, ch) + "' (" + c + "), idle bits at both ends", bits: bits, kinds: kinds, scheme: "nrzl" }], bits.length);
+    var secs = fr.length / 9600;
+    $("uartInfo").textContent = "Frame: " + fr.length + " bits for 8 data bits, " + Math.round((1 - 8 / fr.length) * 100) + "% overhead. At 9600 baud one frame takes " + (secs * 1000).toFixed(2) + " ms. Data bits go least significant bit first, so " + bin(c, 8) + " is sent as " + bin(c, 8).split("").reverse().join("") + ".";
+  }
+  $("uartChar").addEventListener("input", renderUart);
+  $("uartPar").addEventListener("change", renderUart);
+  function renderSignals() {
+    var s = $("sigWord").value || "Hi", bits = bitsFromString(s, 8).slice(0, 24);
+    $("sigBitsNote").textContent = "Bits drawn: " + bits.join("").replace(/(.{8})/g, "$1 ").trim();
+    drawLanes($("sigCv"), Object.keys(SCHEMES).map(function (k) { return { label: SCHEMES[k], bits: bits, scheme: k }; }), Math.max(bits.length, 8));
+    if (!parState.orig.length) parInit(); else parRender();
+    renderUart();
+  }
+  $("sigWord").addEventListener("input", function () { if (current === "signals") renderSignals(); });
+
+  /* ---------- LAB ---------- */
+  var enc = new TextEncoder(), dec = new TextDecoder("utf-8", { fatal: false });
+  var partial = "", dict = null, dl = null, seed = 12345, reveal = Infinity, sendT = null;
+  var S = { units: [], frames: [], flat: [], rx: [], err: [], csv: "", spaced: "", recv: "" };
+  function opts() { return { mode: $("enc").value, par: $("par").value, fr: $("frm").value, ord: $("ord").value, lc: $("lc").value, baud: +$("baud").value, ber: +$("ber").value / 100 }; }
+  function width(o) { return o.mode === "ascii7" ? 7 : 8; }
+  function encode(text, live, mode) {
+    var out = [];
+    Array.from(text).forEach(function (chr) {
+      var cp = chr.codePointAt(0), bytes;
+      if (mode === "ascii7") bytes = [cp < 128 ? cp : 63]; else if (mode === "ascii8") bytes = [cp < 256 ? cp : 63]; else bytes = Array.from(enc.encode(chr));
+      out.push({ cp: cp, chr: chr, bytes: bytes, live: live, lossy: mode !== "utf8" && bytes[0] === 63 && cp !== 63 });
+    });
+    return out;
+  }
+  function rnd(sd, i) { var t = (sd + Math.imul(i + 1, 0x9E3779B9)) | 0; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+  function fmtLabel(o) {
+    var w = width(o), p = o.par === "none" ? "N" : o.par === "even" ? "E" : "O";
+    return o.fr === "uart" ? w + p + "1" : w + " bit" + (o.par === "none" ? "" : " + P");
+  }
+  function decodeFrame(bits, o) {
+    var i = 0, fbad = false, pbad = false, w = width(o);
+    if (o.fr === "uart") { if (bits[0] !== 0) fbad = true; i = 1; }
+    var d = bits.slice(i, i + w); i += w;
+    var pbit = null; if (o.par !== "none") { pbit = bits[i]; i++; }
+    if (o.fr === "uart" && bits[i] !== 1) fbad = true;
+    var m = o.ord === "lsb" ? d.slice().reverse() : d, val = 0; m.forEach(function (b) { val = val * 2 + b; });
+    if (pbit !== null) { var ones = d.reduce(function (a, b) { return a + b; }, 0) + pbit; if (o.par === "even" ? ones % 2 !== 0 : ones % 2 !== 1) pbad = true; }
+    return { val: val, fbad: fbad, pbad: pbad };
+  }
+  function recvChar(v) { if (v === 10) return "\n"; if (v >= 32 && v < 127) return String.fromCharCode(v); if (v >= 160 && v < 256) return String.fromCharCode(v); return "·"; }
+
+  function compute() {
+    var o = opts();
+    var units = encode($("txt").value, false, o.mode).concat(encode(partial, true, o.mode));
+    var frames = [], flat = [], kinds = [], spaced = [];
+    units.forEach(function (u) {
+      u.bytes.forEach(function (b) {
+        var bits = frameOf(b, o);
+        frames.push({ val: b, live: u.live, bits: bits });
+        bits.forEach(function (x) { flat.push(x.b); kinds.push(x.k); });
+        spaced.push(bits.map(function (x) { return x.b; }).join(""));
+      });
+    });
+    var err = flat.map(function (_, i) { return o.ber > 0 && rnd(seed, i) < o.ber; });
+    var rx = flat.map(function (b, i) { return err[i] ? 1 - b : b; });
+    var L = frames.length ? frames[0].bits.length : 0, dec2 = [];
+    frames.forEach(function (f, j) { var d = decodeFrame(rx.slice(j * L, (j + 1) * L), o); d.sent = f.val; d.flips = 0; for (var q = j * L; q < (j + 1) * L; q++) if (err[q]) d.flips++; dec2.push(d); });
+    S = { o: o, units: units, frames: frames, flat: flat, kinds: kinds, rx: rx, err: err, dec: dec2, L: L, spaced: spaced.join(" ") };
+    var w = width(o);
+    S.csv = "index,char,decimal,hex,bits\n" + units.map(function (u, i) {
+      return (i + 1) + ',"' + lab(u.cp, u.chr).replace(/"/g, '""') + '","' + u.bytes.join(" ") + '","' + u.bytes.map(function (b) { return b.toString(16).toUpperCase().padStart(2, "0"); }).join(" ") + '","' + u.bytes.map(function (b) { return bin(b, w); }).join(" ") + '"';
+    }).join("\n");
+  }
+
+  function renderLab() { compute(); drawTables(); drawStream(); drawStats(); drawReceiver(); drawLab(); }
+
+  function drawTables() {
+    var o = S.o, w = width(o), units = S.units;
+    $("live").textContent = partial || "";
+    if (!units.length) { $("tableBox").innerHTML = '<p class="note" style="padding:14px">Speak or type to see each character and its code.</p>'; return; }
+    var shown = units.slice(-250), off = units.length - shown.length;
+    $("tableBox").innerHTML = "<table><thead><tr><th>#</th><th>Char</th><th>Dec</th><th>Hex</th><th>Bits</th></tr></thead><tbody>" + shown.map(function (u, i) {
+      return '<tr class="' + (u.live ? "live" : "") + '"><td>' + (off + i + 1) + '</td><td class="ch' + (u.lossy ? " lossy" : "") + '"' + (u.lossy ? ' title="Not available in this encoding, sent as ?"' : "") + ">" + esc(lab(u.cp, u.chr)) + "</td><td>" + u.bytes.join(" ") + "</td><td>" + u.bytes.map(function (b) { return b.toString(16).toUpperCase().padStart(2, "0"); }).join(" ") + "</td><td>" + u.bytes.map(function (b) { return bin(b, w); }).join(" ") + "</td></tr>";
+    }).join("") + "</tbody></table>";
+    var bx = $("tableBox"); bx.scrollTop = bx.scrollHeight;
+  }
+  function drawStream() {
+    var frames = S.frames, L = S.L, html = "", start = Math.max(0, frames.length - 900), idx = 0;
+    frames.forEach(function (f, j) {
+      if (j >= start) {
+        html += '<span class="by' + (f.live ? " live" : "") + (j === reveal ? " cur" : "") + '">' + f.bits.map(function (x, q) {
+          var flipped = S.err[idx + q], c = flipped ? "bx" : x.k === "s" ? "bs" : x.k === "e" ? "be" : x.k === "q" ? "bq" : x.b ? "b1" : "b0";
+          return '<i class="' + c + '">' + (flipped ? 1 - x.b : x.b) + "</i>";
+        }).join("") + "</span> ";
+      }
+      idx += L;
+    });
+    $("stream").innerHTML = html || '<p class="note">The bitstream appears here as you speak.</p>';
+    var sb = $("stream").parentNode; sb.scrollTop = sb.scrollHeight;
+  }
+  function drawStats() {
+    var o = S.o, nb = S.frames.length, wire = S.flat.length, data = nb * width(o);
+    $("sChars").textContent = S.units.length; $("sBytes").textContent = nb; $("sFmt").textContent = fmtLabel(o); $("sBits").textContent = wire;
+    $("sOver").textContent = wire ? Math.round((1 - data / wire) * 100) + "%" : "0%";
+    $("sRate").textContent = wire ? Math.round(o.baud * data / wire) + " bit/s" : "0 bit/s";
+    var s = wire / o.baud; $("sTime").textContent = s >= 1 ? s.toFixed(2) + " s" : Math.round(s * 1000) + " ms";
+  }
+  function drawReceiver() {
+    var o = S.o, n = Math.min(S.dec.length, reveal === Infinity ? S.dec.length : reveal), html = "", flips = 0, framesHit = 0, caught = 0, silent = 0, bytesArr = [];
+    for (var j = 0; j < n; j++) {
+      var d = S.dec[j]; bytesArr.push(d.val);
+      var detected = d.pbad || d.fbad, wrong = d.val !== d.sent;
+      if (d.flips) framesHit++; flips += d.flips;
+      if (detected) caught++; else if (wrong) silent++;
+      if (o.mode !== "utf8") { var ch = recvChar(d.val); html += '<span class="' + (detected ? "bad" : wrong ? "sil" : "") + '">' + esc(ch) + "</span>"; }
+    }
+    if (o.mode === "utf8") html = esc(dec.decode(new Uint8Array(bytesArr)));
+    $("rx").innerHTML = html || '<span class="note">The receiver rebuilds your text here.</span>';
+    S.recv = o.mode === "utf8" ? dec.decode(new Uint8Array(bytesArr)) : bytesArr.map(recvChar).join("");
+    var total = 0; for (var q = 0; q < S.flat.length && q < n * S.L; q++) total++;
+    var rows = [["Bits flipped by noise", flips + " of " + total + (total ? " (" + (flips / total * 100).toFixed(1) + "%)" : "")], ["Frames hit by noise", framesHit + " of " + n], ["Caught by parity or framing", caught]];
+    if (o.mode !== "utf8") rows.push(["Wrong but not caught", silent]);
+    else rows.push(["UTF-8 decoding", "invalid bytes show as a box"]);
+    if (o.par === "none" && o.fr === "raw" && o.ber > 0) rows.push(["Error detection", "none enabled"]);
+    $("rxStats").innerHTML = rows.map(function (r) { return "<li><span>" + r[0] + "</span><b>" + r[1] + "</b></li>"; }).join("");
+  }
+  function drawLab() {
+    if (current !== "lab") return;
+    var o = S.o; if (!o) return;
+    var lanes = [{ label: "Transmitted, " + SCHEMES[o.lc], bits: S.flat, kinds: S.kinds, scheme: o.lc }];
+    if (o.ber > 0) lanes.push({ label: "Received, red = flipped by noise", bits: S.rx, kinds: S.kinds, scheme: o.lc, err: S.err });
+    drawLanes($("sig"), lanes, 40);
+  }
+
+  ["enc", "par", "frm", "ord", "lc", "baud"].forEach(function (id) { $(id).addEventListener("change", function () { reveal = Infinity; renderLab(); }); });
+  $("txt").addEventListener("input", function () { reveal = Infinity; renderLab(); });
+  $("ber").addEventListener("input", function () { $("berVal").textContent = $("ber").value + "%"; reveal = Infinity; renderLab(); });
+  $("clear").addEventListener("click", function () { $("txt").value = ""; partial = ""; reveal = Infinity; renderLab(); $("txt").focus(); });
+  $("reseed").addEventListener("click", function () { seed = (Math.random() * 2147483647) | 0; reveal = Infinity; renderLab(); say("New noise pattern drawn."); });
+  $("send").addEventListener("click", function () {
+    compute(); if (!S.frames.length) { say("Type or speak something first."); return; }
+    clearInterval(sendT); reveal = 0; renderLab();
+    var delay = Math.max(40, Math.min(220, 2500 / S.frames.length));
+    sendT = setInterval(function () { reveal++; if (reveal > S.frames.length) { clearInterval(sendT); reveal = Infinity; } renderLab(); }, delay);
+  });
+  function say(t) { $("msg").textContent = t; }
+  $("copy").addEventListener("click", function () {
+    var text = S.spaced || ""; if (!text) { say("Nothing to copy yet."); return; }
+    var fb = function () { var r = document.createRange(); r.selectNodeContents($("stream")); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); say("Copy was blocked here. The bitstream is selected, press Ctrl+C or Cmd+C."); };
+    try { navigator.clipboard.writeText(text).then(function () { say("Bits copied."); }, fb); } catch (e) { fb(); }
+  });
+
+  function setMic(st, reason) {
+    $("mic").setAttribute("data-state", st);
+    $("micLabel").textContent = st === "listening" ? "Listening, tap to stop" : st === "starting" ? "Starting" : st === "finishing" ? "Finishing" : "Start listening";
+    if (st === "idle" && reason) {
+      if (reason === "not_granted") say("Microphone access is off for this page. Typing still works.");
+      else if (reason === "rate_limited") say("Too many dictations at once. Try again shortly.");
+      else if (reason === "upstream_error") say("The speech service had a problem. Try again.");
+      else if (reason === "unavailable") { $("mic").hidden = true; $("micNote").hidden = false; }
+    }
+  }
+  $("mic").addEventListener("click", function () {
+    if (!dict) return;
+    if (dict.active()) dict.stop().catch(function () {});
+    else dict.start().catch(function (e) { if (e && e.code === "not_granted") say("Microphone access was declined. Typing still works."); });
+  });
+  (async function () {
+    try { dict = window.claude && window.claude.use ? await window.claude.use("dictation") : null; } catch (e) { dict = null; }
+    if (!dict) { $("micNote").hidden = false; }
+    else {
+      $("mic").hidden = false;
+      dict.onPartial(function (e) { partial = e.text || ""; reveal = Infinity; if (current === "lab") renderLab(); });
+      dict.onFinal(function (e) { var t = $("txt"), add = e.text || ""; if (!t.value) add = add.replace(/^\s+/, ""); t.value += add; partial = ""; reveal = Infinity; if (current === "lab") renderLab(); });
+      dict.onState(function (e) { setMic(e.state, e.reason); });
+    }
+    try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (e) { dl = null; }
+    if (dl) {
+      ["dlTxt", "dlCsv", "dlJson"].forEach(function (id) { $(id).hidden = false; });
+      var save = function (name, data) {
+        if (!data) { say("Nothing to save yet."); return; }
+        dl.save({ filename: name, data: data }).then(function () { say("Saved " + name + "."); }, function (e) { if (!e || e.code !== "declined") say("Could not save the file here."); });
+      };
+      $("dlTxt").addEventListener("click", function () { save("bitstream.txt", S.spaced); });
+      $("dlCsv").addEventListener("click", function () { save("ascii-table.csv", S.units.length ? S.csv : ""); });
+      $("dlJson").addEventListener("click", function () {
+        if (!S.frames.length) { say("Nothing to save yet."); return; }
+        var o = S.o;
+        save("session.json", JSON.stringify({ text: $("txt").value, encoding: o.mode, parity: o.par, framing: o.fr, bitOrder: o.ord, lineCode: o.lc, baud: o.baud, noiseBER: o.ber, bitstream: S.spaced, received: S.recv }, null, 2));
+      });
+    }
+  })();
+
+  /* ---------- VIVA ---------- */
+  var QA = [
+    ["What does ASCII stand for, and what does it do?", "American Standard Code for Information Interchange. It maps 128 characters (letters, digits, symbols and control codes) to the numbers 0 to 127, written as 7-bit binary."],
+    ["Why 7 bits?", "2 to the power 7 is 128, enough for 52 letters, 10 digits, punctuation and 33 control codes. The 8th bit of a byte is left free for parity or extended characters."],
+    ["How is ASCII different from Unicode and UTF-8?", "ASCII has 128 characters. Unicode covers well over 150,000 characters from many scripts. UTF-8 stores each Unicode character in 1 to 4 bytes, and its first 128 codes are identical to ASCII."],
+    ["What happens to a Hindi letter in ASCII mode?", "It has no ASCII code, so this project sends the question mark (code 63) and underlines it in the table. UTF-8 mode encodes it properly."],
+    ["Is speech itself converted to ASCII?", "No. A microphone gives an analog signal and speech recognition turns it into text. Only the text is encoded as ASCII."],
+    ["What is a parity bit?", "An extra bit chosen so the count of 1s is even (even parity) or odd (odd parity). 'A' is 1000001, which has two 1s, so even parity adds 0 and odd parity adds 1."],
+    ["What can parity not do?", "It detects any single-bit error but cannot say which bit failed, cannot correct it, and misses an even number of flipped bits. CRC and Hamming codes go further."],
+    ["Why start and stop bits?", "UART is asynchronous, with no shared clock. The line idles at 1. A start bit (0) tells the receiver a character begins, and a stop bit (1) lets the line return to idle so the next start is visible. In 8N1 that is 2 extra bits per 8, or 20% overhead."],
+    ["Why is the least significant bit sent first in UART?", "It is the convention of serial hardware such as RS-232. This tool lets you switch to MSB first to compare, but a receiver must use the same order as the sender."],
+    ["What is the difference between bit rate and baud rate?", "Bit rate is bits per second. Baud rate is signal elements per second. They are equal for NRZ, but Manchester sends two signal elements per bit, so its signalling rate is double the bit rate."],
+    ["What is line coding and why not send raw voltages?", "Line coding maps bits to signal levels. A good code keeps a receiver in step with the sender, avoids a DC component, and uses bandwidth sensibly. Plain NRZ fails on long runs of identical bits."],
+    ["Why is Manchester called self-clocking?", "Every bit has a transition in the middle, so the receiver can recover the clock from the data. The price is double the bandwidth. 10 Mbps Ethernet used it."],
+    ["How does NRZ-I differ from NRZ-L?", "NRZ-L uses the level itself: 1 is high, 0 is low. NRZ-I uses changes: a 1 flips the level and a 0 leaves it."],
+    ["What is bit error rate?", "Errors divided by bits sent. The noise slider flips each bit with that probability so you can see how parity and framing react."],
+    ["What are the control codes for?", "Codes 0 to 31 control devices and links, for example LF for a new line, ACK and NAK for acknowledgements, and EOT to end a transmission."],
+    ["What are the limits of this project?", "Parity catches single flips only, the channel is simulated, and speech recognition depends on the platform. Future work: CRC or Hamming codes, real serial hardware, and sending the bits as audio tones."]
+  ];
+  $("qa").innerHTML = QA.map(function (x) { return "<details><summary>" + esc(x[0]) + "</summary><p>" + esc(x[1]) + "</p></details>"; }).join("");
+
+  route();
+  if (current !== "lab") compute();
+})();
+</script>
+
+</body>
+</html>
